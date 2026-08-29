@@ -28,6 +28,31 @@ pub struct CleanReport {
     pub jp_subs_kept: usize,
     pub attachments_dropped: usize,
     pub dry_run: bool,
+    pub skipped: bool,
+}
+
+pub fn is_file_already_clean(
+    input: &Path,
+    target_output: &Path,
+    analysis: &AnalysisResult,
+    options: &CleanOptions,
+) -> bool {
+    let has_foreign_audio = !analysis.foreign_audio_streams.is_empty();
+    let has_foreign_subs = !analysis.foreign_subtitle_streams.is_empty();
+    let has_attachments = !analysis.attachment_streams.is_empty();
+    let has_subs_to_strip = options.strip_all_subs && !analysis.jp_subtitle_streams.is_empty();
+
+    let needs_stream_cleaning =
+        has_foreign_audio || has_foreign_subs || has_attachments || has_subs_to_strip;
+
+    if !needs_stream_cleaning {
+        // If in-place mode or the target output path is identical to input path, no work is needed
+        if options.in_place || input == target_output {
+            return true;
+        }
+    }
+
+    false
 }
 
 pub fn clean_video(
@@ -57,6 +82,25 @@ pub fn clean_video(
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
 
+    // Check if the file is already clean (0 foreign audio, 0 foreign subs, 0 fonts)
+    if is_file_already_clean(input, target_output, analysis, options) {
+        return Ok(CleanReport {
+            input_path: input.to_path_buf(),
+            output_path: target_output.to_path_buf(),
+            original_size: analysis.original_file_size,
+            new_size: analysis.original_file_size,
+            duration_secs: 0.0,
+            video_codec,
+            audio_codec,
+            foreign_audio_dropped: 0,
+            foreign_subs_dropped: 0,
+            jp_subs_kept: jp_subs_to_keep,
+            attachments_dropped: 0,
+            dry_run: options.dry_run,
+            skipped: true,
+        });
+    }
+
     if options.dry_run {
         return Ok(CleanReport {
             input_path: input.to_path_buf(),
@@ -71,6 +115,7 @@ pub fn clean_video(
             jp_subs_kept: jp_subs_to_keep,
             attachments_dropped: analysis.attachment_streams.len(),
             dry_run: true,
+            skipped: false,
         });
     }
 
@@ -194,5 +239,6 @@ pub fn clean_video(
         jp_subs_kept: jp_subs_to_keep,
         attachments_dropped: analysis.attachment_streams.len(),
         dry_run: false,
+        skipped: false,
     })
 }

@@ -31,6 +31,14 @@ fn check_dependencies() -> Result<()> {
 }
 
 fn is_video_file(path: &Path) -> bool {
+    // Ignore hidden files and temporary files
+    if let Some(file_name) = path.file_name() {
+        let name = file_name.to_string_lossy();
+        if name.starts_with('.') {
+            return false;
+        }
+    }
+
     if let Some(ext) = path.extension() {
         let e = ext.to_string_lossy().to_lowercase();
         matches!(e.as_str(), "mkv" | "mp4" | "webm" | "avi" | "m4v" | "mov")
@@ -92,6 +100,12 @@ fn print_report(report: &CleanReport, quiet: bool) {
         .unwrap_or_default();
 
     println!("\n{}", style(format!("▶ {}", original_name)).bold().cyan());
+
+    if report.skipped {
+        println!("  {} Already clean & immersion-ready (Skipped)", style("✔").green().bold());
+        return;
+    }
+
     if original_name != target_name {
         println!(
             "  {} {}",
@@ -205,7 +219,8 @@ fn main() -> Result<()> {
     let overall_start = Instant::now();
     let mut total_original_bytes = 0u64;
     let mut total_new_bytes = 0u64;
-    let mut successful_files = 0;
+    let mut cleaned_files = 0;
+    let mut skipped_files = 0;
     let mut failed_files = 0;
 
     for file in &files {
@@ -228,9 +243,13 @@ fn main() -> Result<()> {
 
                 match clean_video(file, &target_out, &analysis, &clean_options) {
                     Ok(report) => {
-                        total_original_bytes += report.original_size;
-                        total_new_bytes += report.new_size;
-                        successful_files += 1;
+                        if report.skipped {
+                            skipped_files += 1;
+                        } else {
+                            total_original_bytes += report.original_size;
+                            total_new_bytes += report.new_size;
+                            cleaned_files += 1;
+                        }
                         print_report(&report, cli.quiet);
                     }
                     Err(e) => {
@@ -273,8 +292,9 @@ fn main() -> Result<()> {
         style("Immersion Sanitization Complete!").bold().green()
     );
     println!(
-        "  Processed: {} file(s) ({} failed) in {:.2}s",
-        style(successful_files).green().bold(),
+        "  Cleaned: {} | Skipped (Already clean): {} | Failed: {} | Time: {:.2}s",
+        style(cleaned_files).green().bold(),
+        style(skipped_files).cyan().bold(),
         if failed_files > 0 {
             style(failed_files).red().bold()
         } else {
