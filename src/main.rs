@@ -115,9 +115,14 @@ fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
     if original_name != target_name {
         println!(
             "       {} {}",
-            style("↳ Renamed to:").dim(),
+            style("↳ Clean name:").dim(),
             style(&target_name).green().bold()
         );
+    }
+
+    if report.renamed_only {
+        println!("       {} Streams already clean — renamed to clean filename", style("✔").green());
+        return;
     }
 
     println!(
@@ -274,7 +279,7 @@ fn main() -> Result<()> {
         style("Immersion Sanitization Complete!").bold().green()
     );
     println!(
-        "  Cleaned: {} | Skipped (Already clean): {} | Failed: {} | Time: {:.2}s",
+        "  Cleaned/Renamed: {} | Skipped (Already clean): {} | Failed: {} | Time: {:.2}s",
         style(cleaned_files).green().bold(),
         style(skipped_files).cyan().bold(),
         if failed_files > 0 {

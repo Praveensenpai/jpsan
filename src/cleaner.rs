@@ -29,30 +29,7 @@ pub struct CleanReport {
     pub attachments_dropped: usize,
     pub dry_run: bool,
     pub skipped: bool,
-}
-
-pub fn is_file_already_clean(
-    input: &Path,
-    target_output: &Path,
-    analysis: &AnalysisResult,
-    options: &CleanOptions,
-) -> bool {
-    let has_foreign_audio = !analysis.foreign_audio_streams.is_empty();
-    let has_foreign_subs = !analysis.foreign_subtitle_streams.is_empty();
-    let has_attachments = !analysis.attachment_streams.is_empty();
-    let has_subs_to_strip = options.strip_all_subs && !analysis.jp_subtitle_streams.is_empty();
-
-    let needs_stream_cleaning =
-        has_foreign_audio || has_foreign_subs || has_attachments || has_subs_to_strip;
-
-    if !needs_stream_cleaning {
-        // If in-place mode or the target output path is identical to input path, no work is needed
-        if options.in_place || input == target_output {
-            return true;
-        }
-    }
-
-    false
+    pub renamed_only: bool,
 }
 
 pub fn clean_video(
@@ -82,8 +59,17 @@ pub fn clean_video(
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
 
-    // Check if the file is already clean (0 foreign audio, 0 foreign subs, 0 fonts)
-    if is_file_already_clean(input, target_output, analysis, options) {
+    let has_foreign_audio = !analysis.foreign_audio_streams.is_empty();
+    let has_foreign_subs = !analysis.foreign_subtitle_streams.is_empty();
+    let has_attachments = !analysis.attachment_streams.is_empty();
+    let has_subs_to_strip = options.strip_all_subs && !analysis.jp_subtitle_streams.is_empty();
+
+    let needs_stream_cleaning =
+        has_foreign_audio || has_foreign_subs || has_attachments || has_subs_to_strip;
+    let needs_renaming = input != target_output;
+
+    // 1. If streams are already clean AND filename is already clean -> SKIP
+    if !needs_stream_cleaning && !needs_renaming {
         return Ok(CleanReport {
             input_path: input.to_path_buf(),
             output_path: target_output.to_path_buf(),
@@ -98,9 +84,49 @@ pub fn clean_video(
             attachments_dropped: 0,
             dry_run: options.dry_run,
             skipped: true,
+            renamed_only: false,
         });
     }
 
+    // 2. If streams are already clean BUT filename needs sanitizing
+    if !needs_stream_cleaning && needs_renaming {
+        let start_time = Instant::now();
+        if !options.dry_run {
+            if let Some(parent) = target_output.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            if options.in_place {
+                std::fs::rename(input, target_output)
+                    .or_else(|_| {
+                        std::fs::copy(input, target_output)?;
+                        std::fs::remove_file(input)
+                    })
+                    .with_context(|| format!("Failed to rename {} to {}", input.display(), target_output.display()))?;
+            } else {
+                std::fs::copy(input, target_output)
+                    .with_context(|| format!("Failed to copy {} to {}", input.display(), target_output.display()))?;
+            }
+        }
+        let duration_secs = start_time.elapsed().as_secs_f64();
+        return Ok(CleanReport {
+            input_path: input.to_path_buf(),
+            output_path: target_output.to_path_buf(),
+            original_size: analysis.original_file_size,
+            new_size: analysis.original_file_size,
+            duration_secs,
+            video_codec,
+            audio_codec,
+            foreign_audio_dropped: 0,
+            foreign_subs_dropped: 0,
+            jp_subs_kept: jp_subs_to_keep,
+            attachments_dropped: 0,
+            dry_run: options.dry_run,
+            skipped: false,
+            renamed_only: true,
+        });
+    }
+
+    // 3. Dry run for files needing stream cleaning
     if options.dry_run {
         return Ok(CleanReport {
             input_path: input.to_path_buf(),
@@ -116,18 +142,18 @@ pub fn clean_video(
             attachments_dropped: analysis.attachment_streams.len(),
             dry_run: true,
             skipped: false,
+            renamed_only: false,
         });
     }
 
+    // 4. Lossless stream cleaning via ffmpeg
     let start_time = Instant::now();
 
-    // Ensure target output directory exists
     if let Some(parent) = target_output.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create destination directory {}", parent.display()))?;
     }
 
-    // Determine temporary working output file to guarantee atomic writes
     let tmp_output = match target_output.parent() {
         Some(parent) => parent.join(format!(
             ".tmp_{}_{}",
@@ -145,10 +171,10 @@ pub fn clean_video(
         .arg("-i")
         .arg(input);
 
-    // 1. Video mapping
+    // Video mapping
     cmd.arg("-map").arg(format!("0:{}", video_stream.index));
 
-    // 2. Japanese Audio mapping
+    // Audio mapping
     if options.keep_all_jp_audio {
         for audio in &analysis.jp_audio_streams {
             cmd.arg("-map").arg(format!("0:{}", audio.index));
@@ -159,7 +185,7 @@ pub fn clean_video(
     cmd.arg("-metadata:s:a:0").arg("language=jpn");
     cmd.arg("-disposition:a:0").arg("default");
 
-    // 3. Subtitle mapping
+    // Subtitle mapping
     if jp_subs_to_keep > 0 {
         for sub in &analysis.jp_subtitle_streams {
             cmd.arg("-map").arg(format!("0:{}", sub.index));
@@ -170,20 +196,17 @@ pub fn clean_video(
         cmd.arg("-sn");
     }
 
-    // 4. Attachments (Drop all fonts & cover arts)
+    // Drop attachments & metadata
     cmd.arg("-dn");
-
-    // 5. Global metadata stripping
     cmd.arg("-map_metadata").arg("-1");
 
-    // 6. Chapters mapping
+    // Chapters mapping
     if options.strip_chapters {
         cmd.arg("-map_chapters").arg("-1");
     } else {
         cmd.arg("-map_chapters").arg("0");
     }
 
-    // 7. Lossless stream copy
     cmd.arg("-c").arg("copy");
     cmd.arg(&tmp_output);
 
@@ -206,23 +229,17 @@ pub fn clean_video(
         anyhow::bail!("ffmpeg generated an empty output file for {}", input.display());
     }
 
-    // Move / replace to target destination
-    if options.in_place && input == target_output {
-        // In-place replacement
-        std::fs::rename(&tmp_output, input)
-            .or_else(|_| {
-                // If moving across filesystems fails, copy and remove
-                std::fs::copy(&tmp_output, input)?;
-                std::fs::remove_file(&tmp_output)
-            })
-            .with_context(|| format!("Failed to replace original file {}", input.display()))?;
-    } else {
-        std::fs::rename(&tmp_output, target_output)
-            .or_else(|_| {
-                std::fs::copy(&tmp_output, target_output)?;
-                std::fs::remove_file(&tmp_output)
-            })
-            .with_context(|| format!("Failed to write final file {}", target_output.display()))?;
+    // Move to final target output
+    std::fs::rename(&tmp_output, target_output)
+        .or_else(|_| {
+            std::fs::copy(&tmp_output, target_output)?;
+            std::fs::remove_file(&tmp_output)
+        })
+        .with_context(|| format!("Failed to write final file {}", target_output.display()))?;
+
+    // If in-place and the name changed, remove the original messy input file
+    if options.in_place && input != target_output {
+        let _ = std::fs::remove_file(input);
     }
 
     let duration_secs = start_time.elapsed().as_secs_f64();
@@ -241,5 +258,6 @@ pub fn clean_video(
         attachments_dropped: analysis.attachment_streams.len(),
         dry_run: false,
         skipped: false,
+        renamed_only: false,
     })
 }

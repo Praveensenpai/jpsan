@@ -62,7 +62,8 @@ pub fn get_output_path(
     };
 
     if in_place {
-        input.to_path_buf()
+        let parent = input.parent().unwrap_or_else(|| Path::new("."));
+        parent.join(target_name)
     } else if let Some(out_dir) = output_dir {
         out_dir.join(target_name)
     } else {
