@@ -15,20 +15,25 @@
 - **📦 Embedded Font Purge**: Drops 20–40 embedded English typesetting fonts (Arial, Comic Sans, Impact, Roboto), saving **15–30 MB per episode** and eliminating `mpv` font-cache startup stutter.
 - **⏭️ Chapter Preservation**: Keeps chapter markers intact so you can automatically skip Openings (OP) and Endings (ED).
 - **🧹 Clean Filename Sanitizer**: Automatically cleans release clutter (`[SubsPlease] Title - 01 (1080p) [HASH].mkv` ➔ `Title - 01.mkv`).
-- **🛡️ Safe & Atomic**: Writes to a verified temporary file before replacement; supports `--dry-run` and `--in-place` modes.
+- **🛡️ Smart Skip**: Skips already-clean files instantly with zero redundant disk I/O.
 
 ---
 
 ## 🚀 Installation
 
-### One-line Install
+### One-line Install (Prebuilt Binary)
+```bash
+curl -fsSL https://raw.githubusercontent.com/Praveensenpai/jpsan/main/install.sh | bash
+```
+
+### Build from Source
 ```bash
 git clone https://github.com/Praveensenpai/jpsan.git
 cd jpsan
 ./install.sh
 ```
 
-Or build manually with Cargo:
+Or via Cargo:
 ```bash
 cargo install --path .
 ```
@@ -50,7 +55,7 @@ jpsan "[SubsPlease] Saijo no Osewa - 01 (1080p) [79559860].mkv"
 jpsan /path/to/Anime/ --output /path/to/Cleaned/
 ```
 
-### In-Place Replace (Overwrites Original Files)
+### In-Place Replace (Overwrites Original Files & Renames)
 ```bash
 jpsan /path/to/Anime/ --in-place
 ```
