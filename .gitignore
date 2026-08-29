@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.tmp*
+*.mkv
+*.mp4
+*.webm
+*.avi
+.DS_Store
