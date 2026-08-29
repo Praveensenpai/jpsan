@@ -8,7 +8,6 @@ use clap::Parser;
 use cli::Cli;
 use cleaner::{clean_video, CleanOptions, CleanReport};
 use console::{style, Emoji};
-use indicatif::{ProgressBar, ProgressStyle};
 use namer::get_output_path;
 use probe::probe_file;
 use std::path::{Path, PathBuf};
@@ -55,12 +54,14 @@ fn collect_video_files(input_path: &Path) -> Vec<PathBuf> {
             vec![]
         }
     } else if input_path.is_dir() {
-        WalkDir::new(input_path)
+        let mut files: Vec<PathBuf> = WalkDir::new(input_path)
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file() && is_video_file(e.path()))
             .map(|e| e.into_path())
-            .collect()
+            .collect();
+        files.sort();
+        files
     } else {
         vec![]
     }
@@ -83,7 +84,7 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn print_report(report: &CleanReport, quiet: bool) {
+fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
     if quiet {
         return;
     }
@@ -99,23 +100,28 @@ fn print_report(report: &CleanReport, quiet: bool) {
         .map(|n| n.to_string_lossy())
         .unwrap_or_default();
 
-    println!("\n{}", style(format!("▶ {}", original_name)).bold().cyan());
+    let prefix = format!("[{}/{}]", idx, total);
+    println!(
+        "\n{} {}",
+        style(prefix).magenta().bold(),
+        style(format!("▶ {}", original_name)).bold().cyan()
+    );
 
     if report.skipped {
-        println!("  {} Already clean & immersion-ready (Skipped)", style("✔").green().bold());
+        println!("       {} Already clean & immersion-ready (Skipped)", style("✔").green().bold());
         return;
     }
 
     if original_name != target_name {
         println!(
-            "  {} {}",
+            "       {} {}",
             style("↳ Renamed to:").dim(),
             style(&target_name).green().bold()
         );
     }
 
     println!(
-        "  {} Video: [{}] | Audio: [JP {}]",
+        "       {} Video: [{}] | Audio: [JP {}]",
         style("•").magenta(),
         style(&report.video_codec).yellow(),
         style(&report.audio_codec).yellow()
@@ -138,7 +144,7 @@ fn print_report(report: &CleanReport, quiet: bool) {
     }
 
     for action in actions {
-        println!("  {} {}", style("✔").green(), style(action).dim());
+        println!("       {} {}", style("✔").green(), style(action).dim());
     }
 
     if !report.dry_run {
@@ -152,7 +158,7 @@ fn print_report(report: &CleanReport, quiet: bool) {
         };
 
         println!(
-            "  {} Size: {} ➔ {}{} | Elapsed: {:.2}s",
+            "       {} Size: {} ➔ {}{} | Elapsed: {:.2}s",
             style("•").magenta(),
             format_bytes(report.original_size),
             style(format_bytes(report.new_size)).bold(),
@@ -203,35 +209,15 @@ fn main() -> Result<()> {
         dry_run: cli.dry_run,
     };
 
-    let pb = if !cli.quiet {
-        let progress = ProgressBar::new(files.len() as u64);
-        progress.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
-                .unwrap()
-                .progress_chars("█▓░"),
-        );
-        Some(progress)
-    } else {
-        None
-    };
-
     let overall_start = Instant::now();
     let mut total_original_bytes = 0u64;
     let mut total_new_bytes = 0u64;
     let mut cleaned_files = 0;
     let mut skipped_files = 0;
     let mut failed_files = 0;
+    let total_count = files.len();
 
-    for file in &files {
-        if let Some(ref progress) = pb {
-            progress.set_message(
-                file.file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-            );
-        }
-
+    for (idx, file) in files.iter().enumerate() {
         match probe_file(file) {
             Ok(analysis) => {
                 let target_out = get_output_path(
@@ -250,12 +236,14 @@ fn main() -> Result<()> {
                             total_new_bytes += report.new_size;
                             cleaned_files += 1;
                         }
-                        print_report(&report, cli.quiet);
+                        print_report(idx + 1, total_count, &report, cli.quiet);
                     }
                     Err(e) => {
                         failed_files += 1;
                         eprintln!(
-                            "\n{} Failed to clean {}: {:#}",
+                            "\n[{}/{}] {} Failed to clean {}: {:#}",
+                            idx + 1,
+                            total_count,
                             style("✖").red().bold(),
                             file.display(),
                             e
@@ -266,21 +254,15 @@ fn main() -> Result<()> {
             Err(e) => {
                 failed_files += 1;
                 eprintln!(
-                    "\n{} Failed to probe {}: {:#}",
+                    "\n[{}/{}] {} Failed to probe {}: {:#}",
+                    idx + 1,
+                    total_count,
                     style("✖").red().bold(),
                     file.display(),
                     e
                 );
             }
         }
-
-        if let Some(ref progress) = pb {
-            progress.inc(1);
-        }
-    }
-
-    if let Some(ref progress) = pb {
-        progress.finish_and_clear();
     }
 
     let overall_time = overall_start.elapsed().as_secs_f64();
