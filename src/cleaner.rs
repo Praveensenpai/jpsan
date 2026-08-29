@@ -141,7 +141,7 @@ pub fn clean_video(
     cmd.arg("-y")
         .arg("-v")
         .arg("error")
-        .arg("-stats")
+        .arg("-nostats")
         .arg("-i")
         .arg(input);
 
@@ -187,13 +187,14 @@ pub fn clean_video(
     cmd.arg("-c").arg("copy");
     cmd.arg(&tmp_output);
 
-    let status = cmd
-        .status()
-        .with_context(|| format!("Failed to run ffmpeg for {}", input.display()))?;
+    let output = cmd
+        .output()
+        .with_context(|| format!("Failed to execute ffmpeg for {}", input.display()))?;
 
-    if !status.success() {
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
         let _ = std::fs::remove_file(&tmp_output);
-        anyhow::bail!("ffmpeg failed while processing {}", input.display());
+        anyhow::bail!("ffmpeg error while processing {}: {}", input.display(), err);
     }
 
     let new_size = std::fs::metadata(&tmp_output)
