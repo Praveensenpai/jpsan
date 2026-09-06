@@ -2,8 +2,11 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -33,6 +36,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "jpsan-release-${{ matrix.target }}"
+          save-if: true
+
       - name: Install musl tools (if musl target)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
@@ -41,6 +50,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package release artifact
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           mkdir -p package
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} package/
@@ -51,6 +61,7 @@ jobs:
           sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
 
       - name: Upload binaries to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -59,3 +70,5 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
