@@ -18,9 +18,22 @@ pub fn sanitize_filename(filename: &str) -> String {
     let re_group = Regex::new(r"^\[[^\]]+\]\s*").unwrap();
     let mut cleaned = re_group.replace(&stem, "").to_string();
 
-    // 2. Remove brackets/parentheses that contain metadata (resolution, codec, subtitles, hashes)
-    // Matches (1080p HEVC x265 10bit AAC), [1080p], [Multiple Subtitle], [Dual Audio], etc.
-    let re_meta_bracket = Regex::new(r"(?i)\s*[\(\[]\s*[^)\]]*(?:1080p|720p|2160p|4k|hevc|x264|x265|avc|10bit|8bit|dual-audio|dual audio|multi-sub|multiple subtitle|subtitle|web-dl|bdrip|bluray|aac|flac|crc|[0-9a-f]{8})[^)\]]*[\)\]]").unwrap();
+    // 2. Remove brackets/parentheses that contain metadata (resolution, codec, language, audio/sub tags, hashes)
+    // Matches (1080p HEVC x265 10bit AAC), [1080p], [Multiple Subtitle], [Dual Audio], [Japanese], [Eng Sub], etc.
+    let re_meta_bracket = Regex::new(concat!(
+        r"(?i)\s*[\(\[]\s*[^)\]]*(?:",
+        r"1080p|720p|480p|2160p|4k|",
+        r"hevc|x264|x265|h264|h265|avc|av1|hi10p|10bit|8bit|",
+        r"dual-audio|dual audio|multi-sub|multiple subtitle|",
+        r"softsub|hardsub|",
+        r"japanese|english|jpn|jap\b|eng\b|raw\b|raws\b|",
+        r"dub\b|dubbed|sub\b|subs\b|subbed|",
+        r"web-dl|webrip|bdrip|bluray|remux|dvdrip|",
+        r"aac|flac|opus|ac3|dts|",
+        r"crc|[0-9a-f]{8}",
+        r")[^)\]]*[\)\]]",
+    ))
+    .unwrap();
     cleaned = re_meta_bracket.replace_all(&cleaned, "").to_string();
 
     // 3. Remove any trailing CRC32 / hash brackets: e.g. [79559860], [F6EDB700]
@@ -92,7 +105,10 @@ mod tests {
     #[test]
     fn test_sanitize_already_clean() {
         let input = "Ore wo Suki nano wa Omae dake ka yo - 01.mkv";
-        assert_eq!(sanitize_filename(input), "Ore wo Suki nano wa Omae dake ka yo - 01.mkv");
+        assert_eq!(
+            sanitize_filename(input),
+            "Ore wo Suki nano wa Omae dake ka yo - 01.mkv"
+        );
     }
 
     #[test]
@@ -105,5 +121,35 @@ mod tests {
     fn test_sanitize_asw() {
         let input = "[ASW] Oshi no Ko - 01 [1080p HEVC AAC] [12345678].mkv";
         assert_eq!(sanitize_filename(input), "Oshi no Ko - 01.mkv");
+    }
+
+    #[test]
+    fn test_sanitize_japanese_tag() {
+        let input = "Yuru Camp - S02E01 [Japanese] [1080p].mkv";
+        assert_eq!(sanitize_filename(input), "Yuru Camp - S02E01.mkv");
+    }
+
+    #[test]
+    fn test_sanitize_english_tag() {
+        let input = "Mushishi - 01 [English] [720p].mkv";
+        assert_eq!(sanitize_filename(input), "Mushishi - 01.mkv");
+    }
+
+    #[test]
+    fn test_sanitize_eng_sub_tag() {
+        let input = "Bocchi the Rock - 05 [1080p][Eng Sub].mkv";
+        assert_eq!(sanitize_filename(input), "Bocchi the Rock - 05.mkv");
+    }
+
+    #[test]
+    fn test_sanitize_dual_audio_raw_tags() {
+        let input = "Violet Evergarden - 01 [Dual Audio][RAW][1080p].mkv";
+        assert_eq!(sanitize_filename(input), "Violet Evergarden - 01.mkv");
+    }
+
+    #[test]
+    fn test_sanitize_yuru_camp_s02() {
+        let input = "Yuru Camp - S02E04 [Japanese] [1080p].mkv";
+        assert_eq!(sanitize_filename(input), "Yuru Camp - S02E04.mkv");
     }
 }

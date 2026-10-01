@@ -1,15 +1,16 @@
-mod cli;
 mod cleaner;
+mod cli;
 mod namer;
 mod probe;
 
 use anyhow::Result;
 use clap::Parser;
-use cli::Cli;
 use cleaner::{clean_video, CleanOptions, CleanReport};
+use cli::Cli;
 use console::{style, Emoji};
 use namer::get_output_path;
 use probe::probe_file;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
@@ -108,7 +109,10 @@ fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
     );
 
     if report.skipped {
-        println!("       {} Already clean & immersion-ready (Skipped)", style("✔").green().bold());
+        println!(
+            "       {} Already clean & immersion-ready (Skipped)",
+            style("✔").green().bold()
+        );
         return;
     }
 
@@ -121,7 +125,10 @@ fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
     }
 
     if report.renamed_only {
-        println!("       {} Streams already clean — renamed to clean filename", style("✔").green());
+        println!(
+            "       {} Streams already clean — renamed to clean filename",
+            style("✔").green()
+        );
         return;
     }
 
@@ -134,10 +141,16 @@ fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
 
     let mut actions = Vec::new();
     if report.foreign_audio_dropped > 0 {
-        actions.push(format!("Dropped {} foreign audio dub(s)", report.foreign_audio_dropped));
+        actions.push(format!(
+            "Dropped {} foreign audio dub(s)",
+            report.foreign_audio_dropped
+        ));
     }
     if report.foreign_subs_dropped > 0 {
-        actions.push(format!("Stripped {} foreign subtitle(s)", report.foreign_subs_dropped));
+        actions.push(format!(
+            "Stripped {} foreign subtitle(s)",
+            report.foreign_subs_dropped
+        ));
     }
     if report.jp_subs_kept > 0 {
         actions.push(format!("Preserved {} Japanese sub(s)", report.jp_subs_kept));
@@ -145,7 +158,10 @@ fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
         actions.push("0 sub tracks (Raw video)".to_string());
     }
     if report.attachments_dropped > 0 {
-        actions.push(format!("Purged {} font attachment(s)", report.attachments_dropped));
+        actions.push(format!(
+            "Purged {} font attachment(s)",
+            report.attachments_dropped
+        ));
     }
 
     for action in actions {
@@ -156,7 +172,9 @@ fn print_report(idx: usize, total: usize, report: &CleanReport, quiet: bool) {
         let size_diff = if report.original_size > report.new_size {
             format!(
                 " (Saved {})",
-                style(format_bytes(report.original_size - report.new_size)).green().bold()
+                style(format_bytes(report.original_size - report.new_size))
+                    .green()
+                    .bold()
             )
         } else {
             "".to_string()
@@ -180,12 +198,16 @@ fn main() -> Result<()> {
     println!(
         "{}{}",
         SPARKLE,
-        style("浄化 (jpsan) — Anime Immersion Sanitizer").bold().magenta()
+        style("浄化 (jpsan) — Anime Immersion Sanitizer")
+            .bold()
+            .magenta()
     );
     if cli.dry_run {
         println!(
             "{}",
-            style("⚠ Running in DRY-RUN mode. No files will be modified.").yellow().bold()
+            style("⚠ Running in DRY-RUN mode. No files will be modified.")
+                .yellow()
+                .bold()
         );
     }
 
@@ -225,12 +247,8 @@ fn main() -> Result<()> {
     for (idx, file) in files.iter().enumerate() {
         match probe_file(file) {
             Ok(analysis) => {
-                let target_out = get_output_path(
-                    file,
-                    cli.output.as_deref(),
-                    cli.in_place,
-                    !cli.no_sanitize,
-                );
+                let target_out =
+                    get_output_path(file, cli.output.as_deref(), cli.in_place, !cli.no_sanitize);
 
                 match clean_video(file, &target_out, &analysis, &clean_options) {
                     Ok(report) => {
@@ -242,6 +260,7 @@ fn main() -> Result<()> {
                             cleaned_files += 1;
                         }
                         print_report(idx + 1, total_count, &report, cli.quiet);
+                        let _ = std::io::stdout().flush();
                     }
                     Err(e) => {
                         failed_files += 1;
@@ -253,6 +272,7 @@ fn main() -> Result<()> {
                             file.display(),
                             e
                         );
+                        let _ = std::io::stderr().flush();
                     }
                 }
             }
@@ -272,7 +292,10 @@ fn main() -> Result<()> {
 
     let overall_time = overall_start.elapsed().as_secs_f64();
 
-    println!("\n{}", style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━").dim());
+    println!(
+        "\n{}",
+        style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━").dim()
+    );
     println!(
         "{} {}",
         CLEAN_ICON,
@@ -299,7 +322,10 @@ fn main() -> Result<()> {
             format_bytes(total_new_bytes)
         );
     }
-    println!("{}", style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━").dim());
+    println!(
+        "{}",
+        style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━").dim()
+    );
 
     Ok(())
 }

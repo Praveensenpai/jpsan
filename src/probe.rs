@@ -62,13 +62,23 @@ impl StreamInfo {
     pub fn is_english_or_foreign(&self) -> bool {
         if let Some(lang) = self.get_language() {
             let l = lang.trim();
-            if l != "jpn" && l != "ja" && l != "jp" && l != "japanese" && l != "und" && !l.is_empty() {
+            if l != "jpn"
+                && l != "ja"
+                && l != "jp"
+                && l != "japanese"
+                && l != "und"
+                && !l.is_empty()
+            {
                 return true;
             }
         }
         if let Some(title) = self.get_title() {
             let t = title.to_lowercase();
-            if t.contains("english") || t.contains("eng") || t.contains("dub") || t.contains("signs") {
+            if t.contains("english")
+                || t.contains("eng")
+                || t.contains("dub")
+                || t.contains("signs")
+            {
                 return true;
             }
         }

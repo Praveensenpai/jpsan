@@ -44,7 +44,10 @@ pub fn clean_video(
         .context("No video stream found in input file")?;
 
     if analysis.jp_audio_streams.is_empty() {
-        anyhow::bail!("No Japanese (or fallback) audio stream found in {}", input.display());
+        anyhow::bail!(
+            "No Japanese (or fallback) audio stream found in {}",
+            input.display()
+        );
     }
 
     let jp_subs_to_keep = if options.strip_all_subs || !options.keep_jp_subs {
@@ -53,7 +56,10 @@ pub fn clean_video(
         analysis.jp_subtitle_streams.len()
     };
 
-    let video_codec = video_stream.codec_name.clone().unwrap_or_else(|| "unknown".to_string());
+    let video_codec = video_stream
+        .codec_name
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
     let audio_codec = analysis.jp_audio_streams[0]
         .codec_name
         .clone()
@@ -101,10 +107,21 @@ pub fn clean_video(
                         std::fs::copy(input, target_output)?;
                         std::fs::remove_file(input)
                     })
-                    .with_context(|| format!("Failed to rename {} to {}", input.display(), target_output.display()))?;
+                    .with_context(|| {
+                        format!(
+                            "Failed to rename {} to {}",
+                            input.display(),
+                            target_output.display()
+                        )
+                    })?;
             } else {
-                std::fs::copy(input, target_output)
-                    .with_context(|| format!("Failed to copy {} to {}", input.display(), target_output.display()))?;
+                std::fs::copy(input, target_output).with_context(|| {
+                    format!(
+                        "Failed to copy {} to {}",
+                        input.display(),
+                        target_output.display()
+                    )
+                })?;
             }
         }
         let duration_secs = start_time.elapsed().as_secs_f64();
@@ -150,8 +167,12 @@ pub fn clean_video(
     let start_time = Instant::now();
 
     if let Some(parent) = target_output.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create destination directory {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "Failed to create destination directory {}",
+                parent.display()
+            )
+        })?;
     }
 
     let tmp_output = match target_output.parent() {
@@ -180,7 +201,8 @@ pub fn clean_video(
             cmd.arg("-map").arg(format!("0:{}", audio.index));
         }
     } else {
-        cmd.arg("-map").arg(format!("0:{}", analysis.jp_audio_streams[0].index));
+        cmd.arg("-map")
+            .arg(format!("0:{}", analysis.jp_audio_streams[0].index));
     }
     cmd.arg("-metadata:s:a:0").arg("language=jpn");
     cmd.arg("-disposition:a:0").arg("default");
@@ -220,13 +242,14 @@ pub fn clean_video(
         anyhow::bail!("ffmpeg error while processing {}: {}", input.display(), err);
     }
 
-    let new_size = std::fs::metadata(&tmp_output)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let new_size = std::fs::metadata(&tmp_output).map(|m| m.len()).unwrap_or(0);
 
     if new_size == 0 {
         let _ = std::fs::remove_file(&tmp_output);
-        anyhow::bail!("ffmpeg generated an empty output file for {}", input.display());
+        anyhow::bail!(
+            "ffmpeg generated an empty output file for {}",
+            input.display()
+        );
     }
 
     // Move to final target output

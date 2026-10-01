@@ -1,6 +1,6 @@
 [package]
 name = "jpsan"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "浄化 (jpsan) — Lossless anime video sanitizer for Japanese immersion"
 authors = ["Praveensenpai"]

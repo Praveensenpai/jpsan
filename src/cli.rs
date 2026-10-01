@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "jpsan",
     author = "Praveensenpai",
-    version = "0.1.0",
+    version,
     about = "浄化 (jpsan) — Blazing-fast lossless anime video sanitizer for Japanese immersion"
 )]
 pub struct Cli {
